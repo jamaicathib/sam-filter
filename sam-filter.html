@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Thibodeau Holdings — SAM.gov Filter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e0f0f;
+  --surface:#161818;
+  --surface2:#1e2020;
+  --surface3:#252828;
+  --border:#2e3232;
+  --border2:#3a3e3e;
+  --gold:#c9a84c;
+  --gold2:#e8c97a;
+  --text:#e8e6e0;
+  --text2:#9a9890;
+  --text3:#6a6866;
+  --red:#e05252;
+  --green:#52a878;
+  --amber:#d4883a;
+  --blue:#4a9fd4;
+  --tag-bg:#1e2020;
+  --tag-border:#3a3e3e;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:'DM Serif Display',serif}
+
+/* HEADER */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.logo{display:flex;flex-direction:column;gap:2px}
+.logo-name{font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--gold2);letter-spacing:.02em}
+.logo-sub{font-size:11px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+.api-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.api-row input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:12px;width:240px}
+.api-row input::placeholder{color:var(--text3)}
+.api-row input:focus{outline:none;border-color:var(--gold)}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.status-dot.live{background:var(--green)}
+.status-dot.demo{background:var(--amber)}
+.status-label{font-size:12px;color:var(--text2)}
+
+/* TABS */
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.5rem}
+.tab{padding:.75rem 1.25rem;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.02em}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--gold2);border-bottom-color:var(--gold)}
+
+/* LAYOUT */
+.main{display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 100px)}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:1.25rem;overflow-y:auto;max-height:calc(100vh - 100px)}
+.results{padding:1.25rem;overflow-y:auto;max-height:calc(100vh - 100px)}
+
+/* QUICK PRESETS */
+.section-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-weight:600;margin-bottom:.5rem}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1.25rem}
+.preset-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
+.preset-btn:hover{border-color:var(--gold);color:var(--gold2);background:var(--surface3)}
+
+/* FILTERS */
+.filter-group{margin-bottom:1rem}
+.filter-label{font-size:11px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;font-weight:600;margin-bottom:.4rem}
+.filter-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+select,input[type=text],input[type=number]{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-family:inherit;font-size:12px;appearance:none}
+select:focus,input:focus{outline:none;border-color:var(--gold)}
+option{background:var(--surface2)}
+.full-width{grid-column:1/-1}
+
+/* RANGE DISPLAY */
+.range-display{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:4px}
+
+/* BUTTONS */
+.btn{padding:8px 14px;border-radius:6px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid var(--border2)}
+.btn-primary{background:var(--gold);color:#0e0f0f;border-color:var(--gold);font-weight:600}
+.btn-primary:hover{background:var(--gold2)}
+.btn-ghost{background:transparent;color:var(--text2)}
+.btn-ghost:hover{color:var(--text);border-color:var(--border2)}
+.btn-row{display:flex;gap:8px;margin-top:1rem}
+.btn-full{width:100%}
+.sort-bar{display:flex;gap:6px;margin-bottom:1rem}
+.sort-btn{background:var(--surface);border:1px solid var(--border);color:var(--text2);padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;transition:all .15s;letter-spacing:.03em}
+.sort-btn.active{background:var(--surface2);border-color:var(--gold);color:var(--gold2)}
+.sort-btn:hover{border-color:var(--border2);color:var(--text)}
+
+/* RESULTS HEADER */
+.results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem}
+.results-count{font-size:13px;color:var(--text2)}
+.results-count strong{color:var(--text);font-weight:600}
+.results-cap{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* CONTRACT CARDS */
+.contract-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:.75rem;overflow:hidden;transition:border-color .15s}
+.contract-card:hover{border-color:var(--border2)}
+.card-header{padding:.875rem 1rem;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}
+.card-title{font-size:13px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:.35rem}
+.card-agency{font-size:11px;color:var(--text3)}
+.card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:.5rem}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:12px;font-weight:500;white-space:nowrap;letter-spacing:.02em}
+.badge-green{background:#0d2a1a;color:var(--green);border:1px solid #1a4a2e}
+.badge-amber{background:#2a1e0d;color:var(--amber);border:1px solid #4a3318}
+.badge-red{background:#2a0d0d;color:var(--red);border:1px solid #4a1818}
+.badge-blue{background:#0d1e2a;color:var(--blue);border:1px solid #183448}
+.badge-gray{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.badge-gold{background:#2a1e08;color:var(--gold2);border:1px solid var(--gold)}
+.card-right{text-align:right;flex-shrink:0}
+.card-value{font-family:'DM Serif Display',serif;font-size:1rem;color:var(--gold2)}
+.card-deadline{font-size:11px;color:var(--text3);margin-top:3px;white-space:nowrap}
+.score-badge{display:flex;flex-direction:column;align-items:center;justify-content:center;width:58px;height:58px;border-radius:10px;flex-shrink:0;border:2px solid}
+.score-num{font-family:'DM Serif Display',serif;font-size:1.3rem;line-height:1}
+.score-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.05em;margin-top:3px;text-align:center;line-height:1.1}
+.deadline-urgent{color:var(--red)}
+.deadline-soon{color:var(--amber)}
+
+/* CARD EXPAND */
+.card-body{display:none;padding:0 1rem 1rem;border-top:1px solid var(--border)}
+.card-body.open{display:block}
+.card-body-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.875rem}
+.detail-group{margin-bottom:.5rem}
+.detail-label{font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;font-weight:600;margin-bottom:2px}
+.detail-val{font-size:12px;color:var(--text)}
+.card-actions{display:flex;gap:8px;margin-top:.875rem}
+.card-link{padding:6px 12px;background:var(--gold);color:#0e0f0f;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;font-family:inherit}
+.card-link:hover{background:var(--gold2)}
+.card-link.ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+
+/* BID CHECKLIST */
+.checklist{margin-top:.875rem;border-top:1px solid var(--border);padding-top:.875rem}
+.checklist-title{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:.5rem}
+.check-item{display:flex;align-items:center;gap:8px;margin-bottom:.35rem;font-size:12px}
+.check-icon{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.check-yes{background:#0d2a1a;color:var(--green)}
+.check-no{background:#2a0d0d;color:var(--red)}
+.check-maybe{background:#2a1e0d;color:var(--amber)}
+.check-label{color:var(--text2)}
+
+/* PIPELINE TAB */
+.pipeline-empty{text-align:center;padding:3rem 1rem;color:var(--text3)}
+.pipeline-empty h3{font-size:1.1rem;color:var(--text2);margin-bottom:.5rem}
+.pipeline-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem}
+.stage{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.stage-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);font-weight:600;margin-bottom:.75rem}
+.stage-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.75rem;margin-bottom:.5rem}
+.stage-card-title{font-size:12px;font-weight:500;color:var(--text);margin-bottom:.35rem;line-height:1.3}
+.stage-card-meta{font-size:11px;color:var(--text3)}
+
+/* LOADING / EMPTY */
+.loading{display:flex;align-items:center;justify-content:center;padding:3rem;color:var(--text3);gap:.5rem}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:3rem 1rem}
+.empty-state p{color:var(--text3);font-size:13px}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* DEMO BANNER */
+.demo-banner{background:#2a1e08;border:1px solid var(--gold);border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:12px;color:var(--gold2);display:flex;align-items:center;gap:.5rem}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .main{grid-template-columns:1fr}
+  .sidebar{max-height:none;border-right:none;border-bottom:1px solid var(--border)}
+  .results{max-height:none}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-name">Thibodeau Holdings</div>
+    <div class="logo-sub">SAM.gov Contract Filter</div>
+  </div>
+  <div class="api-row">
+    <input type="text" id="apiKey" placeholder="SAM.gov API key (optional — uses demo data)"/>
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-label" id="statusLabel">Demo mode</span>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('search')">Search</div>
+  <div class="tab" onclick="showTab('pipeline')">Pipeline <span id="pipelineCount" style="font-size:11px;background:var(--surface2);border-radius:10px;padding:1px 6px;margin-left:4px;color:var(--text3)">0</span></div>
+</div>
+
+<!-- SEARCH TAB -->
+<div id="tab-search">
+  <div class="main">
+
+    <!-- SIDEBAR FILTERS -->
+    <div class="sidebar">
+      <div class="section-label">Quick Presets</div>
+      <div class="presets">
+        <button class="preset-btn" onclick="applyPreset('va')">VA + SDVOSB · TN</button>
+        <button class="preset-btn" onclick="applyPreset('ppe')">PPE · Nationwide</button>
+        <button class="preset-btn" onclick="applyPreset('uniforms')">Uniforms · Military</button>
+        <button class="preset-btn" onclick="applyPreset('sources')">Sources Sought · TN</button>
+        <button class="preset-btn" onclick="applyPreset('small')">Under $100K</button>
+        <button class="preset-btn" onclick="applyPreset('electronics')">Electronics Resale</button>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Keywords</div>
+        <input type="text" id="keywords" placeholder="e.g. uniforms, medical supplies"/>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">NAICS Code</div>
+        <div class="filter-row">
+          <input type="text" id="naics" placeholder="e.g. 315990" class="full-width"/>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Contract Value Range</div>
+        <div class="filter-row">
+          <div>
+            <select id="valueMin">
+              <option value="0">$0 min</option>
+              <option value="10000">$10K</option>
+              <option value="25000">$25K</option>
+              <option value="50000">$50K</option>
+              <option value="100000">$100K</option>
+              <option value="250000">$250K</option>
+            </select>
+          </div>
+          <div>
+            <select id="valueMax">
+              <option value="50000">$50K</option>
+              <option value="100000">$100K</option>
+              <option value="250000">$250K</option>
+              <option value="350000">$350K</option>
+              <option value="500000">$500K</option>
+              <option value="750000">$750K</option>
+              <option value="1000000" selected>$1M</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Set-Aside Type</div>
+        <select id="setAside">
+          <option value="">Any / Open Competition</option>
+          <option value="VOSB">Veteran-Owned (VOSB) ✓</option>
+          <option value="SBA">Small Business (SBA) ✓</option>
+          <option value="WOSB">Women-Owned (WOSB)</option>
+          <option value="HUBZone">HUBZone</option>
+          <option value="SDVOSB">Service-Disabled Vet (SDVOSB)</option>
+          <option value="8A">8(a)</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Notice Type</div>
+        <select id="noticeType">
+          <option value="">All Types</option>
+          <option value="o">Solicitation</option>
+          <option value="p">Presolicitation</option>
+          <option value="k">Sources Sought</option>
+          <option value="r">RFI</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">State</div>
+        <select id="state">
+          <option value="">Nationwide</option>
+          <option value="TN">Tennessee</option>
+          <option value="KY">Kentucky</option>
+          <option value="AL">Alabama</option>
+          <option value="GA">Georgia</option>
+          <option value="MS">Mississippi</option>
+          <option value="NC">North Carolina</option>
+          <option value="VA">Virginia</option>
+          <option value="TX">Texas</option>
+          <option value="FL">Florida</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Posted Within</div>
+        <select id="postedWithin">
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="90" selected>Last 90 days</option>
+          <option value="180">Last 180 days</option>
+          <option value="365">Last year</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary btn-full" onclick="runSearch()">Search SAM.gov</button>
+        <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="results">
+      <div class="results-header">
+        <div>
+          <div class="results-count" id="resultsCount"><strong>0</strong> contracts found</div>
+          <div class="results-cap" id="resultsCap"></div>
+        </div>
+        <div class="sort-bar">
+          <button class="sort-btn active" id="sortBestFit" onclick="sortResults('bestfit')">Best Fit</button>
+          <button class="sort-btn" id="sortSoonest" onclick="sortResults('soonest')">Soonest Due</button>
+          <button class="sort-btn" id="sortValue" onclick="sortResults('value')">High Value</button>
+        </div>
+      </div>
+
+      <div id="resultsContainer">
+        <div class="empty-state">
+          <p>Enter filters above and click Search to find contracts matching your business profile.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PIPELINE TAB -->
+<div id="tab-pipeline" style="display:none;padding:1.25rem">
+  <div class="pipeline-stages" id="pipelineStages">
+    <div class="stage">
+      <div class="stage-title">Evaluating</div>
+      <div id="stage-eval" class="stage-cards"></div>
+    </div>
+    <div class="stage">
+      <div class="stage-title">Bidding</div>
+      <div id="stage-bid" class="stage-cards"></div>
+    </div>
+    <div class="stage">
+      <div class="stage-title">Submitted</div>
+      <div id="stage-submit" class="stage-cards"></div>
+    </div>
+  </div>
+  <div class="pipeline-empty" id="pipelineEmpty">
+    <h3>No contracts tracked yet</h3>
+    <p>Search for contracts and click "Add to Pipeline" to track your bid progress here.</p>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────
+let allResults = [];
+let pipeline = JSON.parse(localStorage.getItem('th_pipeline') || '[]');
+let currentSort = 'bestfit';
+let isLive = false;
+
+// ─── DEMO DATA ───────────────────────────────────────────────
+const DEMO_DATA = [
+  {
+    id:'d1',title:'Medical Examination Gloves — Nitrile, Various Sizes',
+    agency:'Department of Veterans Affairs',naics:'339113',
+    setAside:'SDVOSB',noticeType:'Solicitation',
+    state:'TN',postedDate:'2026-04-28',dueDate:'2026-06-10',
+    valueMin:45000,valueMax:120000,solNumber:'36C24925Q0341',
+    description:'Procurement of nitrile examination gloves for VA Medical Centers across VISN 9.'
+  },
+  {
+    id:'d2',title:'Tactical Uniform Components — FR Shirts and Trousers',
+    agency:'Defense Logistics Agency',naics:'315990',
+    setAside:'SBA',noticeType:'Solicitation',
+    state:'TN',postedDate:'2026-05-01',dueDate:'2026-05-30',
+    valueMin:80000,valueMax:350000,solNumber:'SPELA-26-Q-0022',
+    description:'Flame-resistant uniform tops and bottoms conforming to military spec MIL-DTL-32533.'
+  },
+  {
+    id:'d3',title:'Office Supplies and Janitorial Products — Sources Sought',
+    agency:'General Services Administration',naics:'424120',
+    setAside:'WOSB',noticeType:'Sources Sought',
+    state:'',postedDate:'2026-05-08',dueDate:'2026-07-01',
+    valueMin:10000,valueMax:85000,solNumber:'47QSMD26R0018',
+    description:'GSA is seeking small businesses capable of supplying office and janitorial products nationally.'
+  },
+  {
+    id:'d4',title:'Electronic Components — Resale to Government Labs',
+    agency:'Dept of Energy — Oak Ridge',naics:'423690',
+    setAside:'SBA',noticeType:'Presolicitation',
+    state:'TN',postedDate:'2026-04-15',dueDate:'2026-06-20',
+    valueMin:25000,valueMax:200000,solNumber:'89303026REM000004',
+    description:'Procurement of miscellaneous electronic components for Oak Ridge research facilities.'
+  },
+  {
+    id:'d5',title:'Personal Protective Equipment — N95 Respirators and Face Shields',
+    agency:'HHS — Strategic National Stockpile',naics:'339113',
+    setAside:'',noticeType:'Solicitation',
+    state:'',postedDate:'2026-05-10',dueDate:'2026-06-25',
+    valueMin:200000,valueMax:750000,solNumber:'75A50126Q00089',
+    description:'Nationwide solicitation for N95 respirators and face shields for stockpile replenishment.'
+  },
+  {
+    id:'d6',title:'Cleaning and Sanitation Supplies — Recurring BPA',
+    agency:'U.S. Army — Fort Campbell',naics:'325612',
+    setAside:'SDVOSB',noticeType:'Solicitation',
+    state:'TN',postedDate:'2026-05-12',dueDate:'2026-06-05',
+    valueMin:15000,valueMax:90000,solNumber:'W91151-26-Q-0044',
+    description:'Blanket purchase agreement for cleaning supplies across Fort Campbell facilities.'
+  },
+  {
+    id:'d7',title:'Safety Vests and High-Visibility Apparel',
+    agency:'Dept of Transportation',naics:'315990',
+    setAside:'VOSB',noticeType:'Solicitation',
+    state:'TN',postedDate:'2026-05-03',dueDate:'2026-07-15',
+    valueMin:8000,valueMax:55000,solNumber:'693JJ426Q000015',
+    description:'High-visibility safety vests and apparel for TDOT road crews, ANSI Class 2 and 3.'
+  },
+  {
+    id:'d8',title:'IT Hardware Refresh — Monitors and Peripherals',
+    agency:'Tennessee Valley Authority',naics:'423430',
+    setAside:'SBA',noticeType:'RFI',
+    state:'TN',postedDate:'2026-04-20',dueDate:'2026-08-01',
+    valueMin:50000,valueMax:400000,solNumber:'TVA-RFI-2026-IT-012',
+    description:'TVA seeking sources for monitor and peripheral hardware refresh across multiple sites.'
+  },
+  {
+    id:'d9',title:'Food Service Disposables — Trays, Cups, Utensils',
+    agency:'Department of Veterans Affairs',naics:'322220',
+    setAside:'SDVOSB',noticeType:'Solicitation',
+    state:'TN',postedDate:'2026-05-14',dueDate:'2026-06-18',
+    valueMin:12000,valueMax:68000,solNumber:'36C24926Q0112',
+    description:'Disposable food service items for VA Nashville campus cafeteria and patient services.'
+  },
+  {
+    id:'d10',title:'Work Gloves and Hand Protection — Industrial Grade',
+    agency:'Defense Logistics Agency',naics:'315990',
+    setAside:'SBA',noticeType:'Solicitation',
+    state:'',postedDate:'2026-05-06',dueDate:'2026-06-30',
+    valueMin:30000,valueMax:180000,solNumber:'SPELA-26-Q-0031',
+    description:'Industrial work gloves and hand protection PPE for DLA distribution centers nationwide.'
+  }
+];
+
+// ─── PRESETS ─────────────────────────────────────────────────
+const PRESETS = {
+  va:{keywords:'medical gloves PPE',setAside:'SDVOSB',state:'TN',noticeType:'',naics:''},
+  ppe:{keywords:'PPE masks respirator gloves',setAside:'',state:'',noticeType:'o',naics:'339113'},
+  uniforms:{keywords:'uniform apparel tactical',setAside:'SBA',state:'',noticeType:'o',naics:'315990'},
+  sources:{keywords:'',setAside:'',state:'TN',noticeType:'k',naics:''},
+  small:{keywords:'',valueMax:'100000',setAside:'SBA',state:'',noticeType:'',naics:''},
+  electronics:{keywords:'electronics components hardware',setAside:'SBA',state:'',noticeType:'',naics:'423690'}
+};
+
+function applyPreset(key){
+  const p = PRESETS[key];
+  if(p.keywords !== undefined) document.getElementById('keywords').value = p.keywords;
+  if(p.setAside !== undefined) document.getElementById('setAside').value = p.setAside;
+  if(p.state !== undefined) document.getElementById('state').value = p.state;
+  if(p.noticeType !== undefined) document.getElementById('noticeType').value = p.noticeType;
+  if(p.naics !== undefined) document.getElementById('naics').value = p.naics;
+  if(p.valueMax) document.getElementById('valueMax').value = p.valueMax;
+  runSearch();
+}
+
+function clearFilters(){
+  ['keywords','naics'].forEach(id=>document.getElementById(id).value='');
+  ['setAside','noticeType','state','postedWithin'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('valueMin').value='0';
+  document.getElementById('valueMax').value='1000000';
+  document.getElementById('resultsContainer').innerHTML='<div class="empty-state"><p>Filters cleared. Run a new search.</p></div>';
+  document.getElementById('resultsCount').innerHTML='<strong>0</strong> contracts found';
+  document.getElementById('resultsCap').textContent='';
+  allResults=[];
+}
+
+// ─── SEARCH ──────────────────────────────────────────────────
+async function runSearch(){
+  const apiKey = document.getElementById('apiKey').value.trim();
+  isLive = !!apiKey;
+  updateStatusDot(isLive);
+
+  document.getElementById('resultsContainer').innerHTML='<div class="loading"><div class="spinner"></div> Searching contracts…</div>';
+
+  try {
+    let results;
+    if(isLive){
+      results = await fetchLive(apiKey);
+    } else {
+      results = filterDemo();
+    }
+    allResults = results;
+    renderResults();
+  } catch(e){
+    document.getElementById('resultsContainer').innerHTML=`<div class="empty-state"><p style="color:var(--red)">Error fetching results. Check your API key or try demo mode.</p></div>`;
+  }
+}
+
+function updateStatusDot(live){
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('statusLabel');
+  dot.className = 'status-dot ' + (live ? 'live' : 'demo');
+  label.textContent = live ? 'Live SAM.gov' : 'Demo mode';
+}
+
+function filterDemo(){
+  const kw = document.getElementById('keywords').value.toLowerCase();
+  const naics = document.getElementById('naics').value.trim();
+  const setAside = document.getElementById('setAside').value;
+  const noticeType = document.getElementById('noticeType').value;
+  const state = document.getElementById('state').value;
+  const vMin = parseInt(document.getElementById('valueMin').value)||0;
+  const vMax = parseInt(document.getElementById('valueMax').value)||1000000;
+  const daysBack = parseInt(document.getElementById('postedWithin').value)||90;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysBack);
+
+  return DEMO_DATA.filter(c => {
+    if(kw && !c.title.toLowerCase().includes(kw) && !c.description.toLowerCase().includes(kw) && !c.naics.includes(kw)) return false;
+    if(naics && !c.naics.startsWith(naics)) return false;
+    if(setAside && c.setAside !== setAside) return false;
+    if(noticeType && noticeType !== c.noticeType.charAt(0).toLowerCase() && !matchNoticeType(c.noticeType, noticeType)) return false;
+    if(state && c.state && c.state !== state) return false;
+    if(c.valueMax < vMin || c.valueMin > vMax) return false;
+    const posted = new Date(c.postedDate);
+    if(posted < cutoff) return false;
+    return true;
+  });
+}
+
+function matchNoticeType(label, code){
+  const map = {o:'Solicitation',p:'Presolicitation',k:'Sources Sought',r:'RFI'};
+  return label === map[code];
+}
+
+async function fetchLive(apiKey){
+  const kw = document.getElementById('keywords').value.trim() || 'supplies';
+  const naics = document.getElementById('naics').value.trim();
+  const setAside = document.getElementById('setAside').value;
+  const noticeType = document.getElementById('noticeType').value;
+  const state = document.getElementById('state').value;
+  const daysBack = parseInt(document.getElementById('postedWithin').value)||90;
+  const vMin = parseInt(document.getElementById('valueMin').value)||0;
+  const vMax = parseInt(document.getElementById('valueMax').value)||1000000;
+
+  const today = new Date();
+  const from = new Date(); from.setDate(from.getDate() - daysBack);
+  // SAM.gov requires mm/dd/yyyy format
+  const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+
+  let samUrl = `https://api.sam.gov/opportunities/v2/search?api_key=${apiKey}&limit=25&q=${encodeURIComponent(kw)}&postedFrom=${fmt(from)}&postedTo=${fmt(today)}`;
+  if(naics) samUrl += `&naicsCode=${naics}`;
+  if(setAside) samUrl += `&typeOfSetAsideCode=${setAside}`;
+  if(noticeType) samUrl += `&ptype=${noticeType}`;
+  if(state) samUrl += `&state=${state}`;
+
+  // Try direct first, fall back to CORS proxy
+  let data;
+  try {
+    const r = await fetch(samUrl);
+    if(!r.ok) throw new Error('direct failed');
+    data = await r.json();
+  } catch(e) {
+    // CORS proxy fallback for local file usage
+    const proxy = 'https://corsproxy.io/?';
+    const r2 = await fetch(proxy + encodeURIComponent(samUrl));
+    if(!r2.ok) throw new Error('API error');
+    data = await r2.json();
+  }
+
+  const vMinMid = vMin;
+  const vMaxMid = vMax;
+
+  return (data.opportunitiesData || []).map(o => {
+    const award = o.award||{};
+    return {
+      id: o.noticeId,
+      title: o.title,
+      agency: o.organizationName || o.fullParentPathName || 'Unknown Agency',
+      naics: (o.naicsCode||'').replace(/[^0-9]/g,''),
+      setAside: o.typeOfSetAside || '',
+      noticeType: o.type || '',
+      state: o.officeAddress?.state || '',
+      postedDate: o.postedDate?.split('T')[0] || '',
+      dueDate: o.responseDeadLine?.split('T')[0] || o.archiveDate?.split('T')[0] || '',
+      valueMin: award.amount ? award.amount * .5 : vMinMid,
+      valueMax: award.amount || (vMinMid + vMaxMid) / 2,
+      solNumber: o.solicitationNumber || o.noticeId,
+      description: o.description?.slice(0,250) || '',
+      samUrl: `https://sam.gov/opp/${o.noticeId}/view`
+    };
+  }).filter(c => {
+    if(c.valueMax < vMin || c.valueMin > vMax) return false;
+    return true;
+  });
+}
+
+// ─── FIT SCORE ────────────────────────────────────────────────
+function fitScore(c){
+  let s = 50;
+
+  // Set-aside scoring — VOSB and SBA are the primary eligible types for Thibodeau Holdings
+  // SDVOSB requires certification not yet held, so those are aspirational (lower score)
+  if(c.setAside==='VOSB') s+=20;           // veteran-owned: full eligibility
+  else if(c.setAside==='SBA') s+=18;        // small business: full eligibility
+  else if(c.setAside==='WOSB') s+=12;       // women-owned: eligible if applicable
+  else if(c.setAside==='HUBZone') s+=8;     // check zone eligibility
+  else if(c.setAside==='SDVOSB') s+=5;      // service-disabled: not yet certified, skip for now
+  else if(c.setAside==='8A') s+=3;          // 8(a): requires separate certification
+  else if(!c.setAside) s+=15;              // open competition: no set-aside restriction, anyone can bid
+
+  // Tennessee and nearby states
+  if(c.state==='TN') s+=12;
+  else if(['KY','AL','GA','MS','NC','VA'].includes(c.state)) s+=5;
+  else if(!c.state) s+=6;                  // nationwide = fine for supply/resale
+
+  // Deadline window (10–30 days is ideal to act now)
+  const d = daysUntilDue(c.dueDate);
+  if(d===null) s+=3;
+  else if(d>=10 && d<=30) s+=10;
+  else if(d>30 && d<=60) s+=7;
+  else if(d>60) s+=3;
+  else s-=15;                              // expired or <10 days = penalty
+
+  // Value sweet spot ($15K–$350K)
+  const mid = (c.valueMin+c.valueMax)/2;
+  if(mid>=15000 && mid<=350000) s+=8;
+  else if(mid>350000 && mid<=750000) s+=4;
+
+  // Notice type — solicitations are actionable right now
+  if(c.noticeType==='Solicitation'||c.noticeType==='Combined Synopsis/Solicitation') s+=8;
+  else if(c.noticeType==='Sources Sought') s+=4;  // worth responding to build visibility
+  else if(c.noticeType==='Presolicitation') s+=2;  // watch list
+
+  // NAICS filter match bonus
+  const naicsFilter = document.getElementById('naics').value.trim();
+  if(naicsFilter && c.naics && c.naics.startsWith(naicsFilter)) s+=8;
+
+  return Math.min(100, Math.max(0, Math.round(s)));
+}
+
+function fitLabel(score){
+  if(score>=90) return 'Excellent Fit';
+  if(score>=75) return 'Strong Fit';
+  if(score>=60) return 'Good Fit';
+  if(score>=45) return 'Possible';
+  return 'Low Fit';
+}
+
+function fitColor(score){
+  if(score>=90) return '#52a878';
+  if(score>=75) return '#4a9fd4';
+  if(score>=60) return '#c9a84c';
+  if(score>=45) return '#d4883a';
+  return '#9a9890';
+}
+
+// ─── SORT ─────────────────────────────────────────────────────
+function sortResults(mode){
+  currentSort = mode;
+  document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sort'+mode.charAt(0).toUpperCase()+mode.slice(1))?.classList.add('active');
+  renderResults();
+}
+
+function sortedResults(){
+  const arr = [...allResults];
+  if(currentSort === 'soonest'){
+    arr.sort((a,b)=>{
+      if(!a.dueDate) return 1; if(!b.dueDate) return -1;
+      return new Date(a.dueDate)-new Date(b.dueDate);
+    });
+  } else if(currentSort === 'value'){
+    arr.sort((a,b)=>((b.valueMin+b.valueMax)/2)-((a.valueMin+a.valueMax)/2));
+  } else {
+    arr.sort((a,b)=>fitScore(b)-fitScore(a));
+  }
+  return arr;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────
+function renderResults(){
+  const arr = sortedResults();
+  const count = arr.length;
+  document.getElementById('resultsCount').innerHTML = `<strong>${count}</strong> contract${count!==1?'s':''} found`;
+  document.getElementById('resultsCap').textContent = isLive && count===25 ? 'Showing top 25 results · refine filters to narrow' : '';
+
+  if(!count){
+    document.getElementById('resultsContainer').innerHTML='<div class="empty-state"><p>No contracts matched your filters. Try broader keywords or different set-aside types.</p></div>';
+    return;
+  }
+
+  let html = '';
+  if(!isLive) html += '<div class="demo-banner">⚡ Demo mode — showing sample contracts. Add your SAM.gov API key to search live opportunities.</div>';
+
+  arr.forEach(c => {
+    html += buildCard(c);
+  });
+  document.getElementById('resultsContainer').innerHTML = html;
+}
+
+function buildCard(c){
+  const days = daysUntilDue(c.dueDate);
+  const urgency = days !== null ? (days < 10 ? 'red' : days < 21 ? 'amber' : 'green') : 'gray';
+  const deadlineLabel = days === null ? 'No deadline' : days < 0 ? 'Expired' : days === 0 ? 'Due today' : `${days}d remaining`;
+  const valueMid = (c.valueMin + c.valueMax) / 2;
+  const valueStr = formatValue(c.valueMin, c.valueMax);
+  const inPipeline = pipeline.some(p=>p.id===c.id);
+
+  // Auto-fill checklist
+  const naicsFilter = document.getElementById('naics').value.trim();
+  const setAsideFilter = document.getElementById('setAside').value;
+  const naicsMatch = !naicsFilter || c.naics.startsWith(naicsFilter);
+  const setAsideMatch = !setAsideFilter || c.setAside === setAsideFilter || c.setAside === 'SBA' || c.setAside === '';
+  const underThreshold = c.valueMax <= 350000;
+  const deadlineOk = days === null || days >= 10;
+
+  const score = fitScore(c);
+  const sLabel = fitLabel(score);
+  const sColor = fitColor(score);
+
+  return `
+  <div class="contract-card" id="card-${c.id}">
+    <div class="card-header" onclick="toggleCard('${c.id}')">
+      <div style="flex:1;min-width:0">
+        <div class="card-title">${c.title}</div>
+        <div class="card-agency">${c.agency}</div>
+        <div class="card-meta">
+          ${c.setAside ? `<span class="badge badge-gold">${c.setAside}</span>` : ''}
+          ${c.noticeType ? `<span class="badge badge-blue">${c.noticeType}</span>` : ''}
+          ${c.state ? `<span class="badge badge-gray">${c.state}</span>` : '<span class="badge badge-gray">Nationwide</span>'}
+          ${c.naics ? `<span class="badge badge-gray">NAICS ${c.naics}</span>` : ''}
+        </div>
+        <div style="margin-top:.5rem;font-size:11px;color:var(--text3)">
+          <span style="color:var(--gold2);font-weight:500">${valueStr}</span>
+          &nbsp;·&nbsp;
+          <span class="${urgency==='red'?'deadline-urgent':urgency==='amber'?'deadline-soon':''}">${deadlineLabel}</span>
+        </div>
+      </div>
+      <div class="score-badge" style="background:${sColor}18;border-color:${sColor}55;color:${sColor}">
+        <div class="score-num">${score}</div>
+        <div class="score-lbl">${sLabel}</div>
+      </div>
+    </div>
+    <div class="card-body" id="body-${c.id}">
+      <div class="card-body-grid">
+        <div>
+          <div class="detail-label">Solicitation #</div>
+          <div class="detail-val" style="font-size:11px;font-family:monospace">${c.solNumber||'—'}</div>
+        </div>
+        <div>
+          <div class="detail-label">Posted</div>
+          <div class="detail-val">${fmtDate(c.postedDate)}</div>
+        </div>
+        <div>
+          <div class="detail-label">Due Date</div>
+          <div class="detail-val ${urgency==='red'?'deadline-urgent':urgency==='amber'?'deadline-soon':''}">${fmtDate(c.dueDate)||'TBD'}</div>
+        </div>
+        <div>
+          <div class="detail-label">Contract Value</div>
+          <div class="detail-val">${valueStr}</div>
+        </div>
+        <div style="grid-column:1/-1">
+          <div class="detail-label">Description</div>
+          <div class="detail-val" style="color:var(--text2);line-height:1.5">${c.description||'No description available.'}</div>
+        </div>
+      </div>
+
+      <div class="checklist">
+        <div class="checklist-title">Bid / No-Bid Quick Check</div>
+        <div class="check-item">
+          <div class="check-icon ${naicsMatch?'check-yes':'check-no'}">${naicsMatch?'✓':'✗'}</div>
+          <span class="check-label">NAICS code match${naicsFilter?` (${c.naics} ~ ${naicsFilter})`:' (no filter set)'}</span>
+        </div>
+        <div class="check-item">
+          <div class="check-icon ${setAsideMatch?'check-yes':'check-maybe'}">${setAsideMatch?'✓':'?'}</div>
+          <span class="check-label">Set-aside eligibility (${c.setAside||'Open'})</span>
+        </div>
+        <div class="check-item">
+          <div class="check-icon ${underThreshold?'check-yes':'check-maybe'}">${underThreshold?'✓':'?'}</div>
+          <span class="check-label">Under $350K threshold (${formatShort(c.valueMax)})</span>
+        </div>
+        <div class="check-item">
+          <div class="check-icon ${deadlineOk?'check-yes':'check-no'}">${deadlineOk?'✓':'✗'}</div>
+          <span class="check-label">≥10 days to deadline (${days===null?'no deadline':days+'d'})</span>
+        </div>
+        <div class="check-item">
+          <div class="check-icon check-maybe">?</div>
+          <span class="check-label">Can you fulfill scope / delivery requirements?</span>
+        </div>
+        <div class="check-item">
+          <div class="check-icon check-maybe">?</div>
+          <span class="check-label">Do you have or can source the product?</span>
+        </div>
+      </div>
+
+      <div class="card-actions">
+        <a class="card-link" href="${c.samUrl||`https://sam.gov/search/?index=opp&keywords=${encodeURIComponent(c.solNumber||c.title)}`}" target="_blank">View on SAM.gov ↗</a>
+        <button class="card-link ghost btn" id="pipe-btn-${c.id}" onclick="togglePipeline('${c.id}')">${inPipeline?'✓ In Pipeline':'+ Add to Pipeline'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleCard(id){
+  const body = document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+
+// ─── VALUE FORMAT ─────────────────────────────────────────────
+function formatValue(min,max){
+  if(!min && !max) return 'TBD';
+  if(min===max) return '$'+fmtNum(min);
+  return '$'+fmtNum(min)+' – $'+fmtNum(max);
+}
+function formatShort(n){
+  if(n>=1000000) return '$'+(n/1000000).toFixed(1)+'M';
+  if(n>=1000) return '$'+(n/1000).toFixed(0)+'K';
+  return '$'+n;
+}
+function fmtNum(n){
+  if(n>=1000000) return (n/1000000).toFixed(1)+'M';
+  if(n>=1000) return (n/1000).toFixed(0)+'K';
+  return n.toString();
+}
+function fmtDate(d){
+  if(!d) return '';
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function daysUntilDue(d){
+  if(!d) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(d+'T00:00:00');
+  return Math.round((due-today)/(1000*60*60*24));
+}
+
+// ─── PIPELINE ─────────────────────────────────────────────────
+function togglePipeline(id){
+  const contract = allResults.find(c=>c.id===id);
+  if(!contract) return;
+  const idx = pipeline.findIndex(p=>p.id===id);
+  if(idx>=0){
+    pipeline.splice(idx,1);
+    document.getElementById('pipe-btn-'+id).textContent='+ Add to Pipeline';
+  } else {
+    pipeline.push({...contract, stage:'eval', addedAt:new Date().toISOString()});
+    document.getElementById('pipe-btn-'+id).textContent='✓ In Pipeline';
+  }
+  savePipeline();
+  renderPipeline();
+}
+
+function savePipeline(){
+  localStorage.setItem('th_pipeline', JSON.stringify(pipeline));
+  document.getElementById('pipelineCount').textContent = pipeline.length || '0';
+}
+
+function renderPipeline(){
+  const stages = {eval:'stage-eval',bid:'stage-bid',submit:'stage-submit'};
+  Object.values(stages).forEach(id=>document.getElementById(id).innerHTML='');
+
+  pipeline.forEach(c=>{
+    const stage = c.stage || 'eval';
+    const days = daysUntilDue(c.dueDate);
+    const urgency = days!==null && days<10 ? 'deadline-urgent' : days!==null && days<21 ? 'deadline-soon' : '';
+    const card = `
+      <div class="stage-card">
+        <div class="stage-card-title">${c.title}</div>
+        <div class="stage-card-meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <span class="badge badge-gray">${formatShort(c.valueMax)}</span>
+          ${days!==null?`<span class="badge ${days<10?'badge-red':days<21?'badge-amber':'badge-gray'} ${urgency}">${days}d</span>`:''}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:8px">
+          ${stage!=='eval'?`<button onclick="moveStage('${c.id}','${prevStage(stage)}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer">←</button>`:''}
+          ${stage!=='submit'?`<button onclick="moveStage('${c.id}','${nextStage(stage)}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer">→</button>`:''}
+          <button onclick="removeFromPipeline('${c.id}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--red);cursor:pointer;margin-left:auto">✕</button>
+        </div>
+      </div>`;
+    document.getElementById(stages[stage]).insertAdjacentHTML('beforeend',card);
+  });
+
+  document.getElementById('pipelineEmpty').style.display = pipeline.length ? 'none' : 'block';
+}
+
+function nextStage(s){ return s==='eval'?'bid':s==='bid'?'submit':'submit' }
+function prevStage(s){ return s==='submit'?'bid':s==='bid'?'eval':'eval' }
+
+function moveStage(id, stage){
+  const idx = pipeline.findIndex(p=>p.id===id);
+  if(idx>=0){ pipeline[idx].stage=stage; savePipeline(); renderPipeline(); }
+}
+function removeFromPipeline(id){
+  pipeline = pipeline.filter(p=>p.id!==id);
+  savePipeline(); renderPipeline();
+  const btn = document.getElementById('pipe-btn-'+id);
+  if(btn) btn.textContent='+ Add to Pipeline';
+}
+
+// ─── TABS ─────────────────────────────────────────────────────
+function showTab(tab){
+  document.getElementById('tab-search').style.display = tab==='search'?'':'none';
+  document.getElementById('tab-pipeline').style.display = tab==='pipeline'?'':'none';
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', (tab==='search'&&i===0)||(tab==='pipeline'&&i===1)));
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+updateStatusDot(false);
+document.getElementById('pipelineCount').textContent = pipeline.length || '0';
+renderPipeline();
+
+document.getElementById('apiKey').addEventListener('change', ()=>{
+  const live = !!document.getElementById('apiKey').value.trim();
+  updateStatusDot(live);
+});
+</script>
+</body>
+</html>
