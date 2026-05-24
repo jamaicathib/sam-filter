@@ -125,6 +125,8 @@ option{background:var(--surface2)}
 .card-link{padding:6px 12px;background:var(--gold);color:#0e0f0f;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;font-family:inherit}
 .card-link:hover{background:var(--gold2)}
 .card-link.ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.card-link.dismiss{background:transparent;border:1px solid var(--red);color:var(--red)}
+.card-link.dismiss:hover{background:#2a0d0d}
 
 /* BID CHECKLIST */
 .checklist{margin-top:.875rem;border-top:1px solid var(--border);padding-top:.875rem}
@@ -311,12 +313,14 @@ option{background:var(--surface2)}
           <div class="results-count" id="resultsCount"><strong>0</strong> contracts found</div>
           <div class="results-cap" id="resultsCap"></div>
         </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-ghost" id="clearDismissedBtn" onclick="clearDismissed()" style="font-size:11px;display:none">↺ Show passed</button>
         <div class="sort-bar">
           <button class="sort-btn active" id="sortBestFit" onclick="sortResults('bestfit')">Best Fit</button>
           <button class="sort-btn" id="sortSoonest" onclick="sortResults('soonest')">Soonest Due</button>
           <button class="sort-btn" id="sortValue" onclick="sortResults('value')">High Value</button>
         </div>
-      </div>
+        </div>
 
       <div id="resultsContainer">
         <div class="empty-state">
@@ -353,6 +357,7 @@ option{background:var(--surface2)}
 // ─── STATE ───────────────────────────────────────────────────
 let allResults = [];
 let pipeline = JSON.parse(localStorage.getItem('th_pipeline') || '[]');
+let dismissed = new Set(JSON.parse(localStorage.getItem('th_dismissed') || '[]'));
 let currentSort = 'bestfit';
 let isLive = false;
 
@@ -736,11 +741,33 @@ function sortedResults(){
 }
 
 // ─── RENDER ──────────────────────────────────────────────────
+function dismissContract(id){
+  dismissed.add(id);
+  localStorage.setItem('th_dismissed', JSON.stringify([...dismissed]));
+  const card = document.getElementById('card-'+id);
+  if(card){
+    card.style.transition='opacity .3s';
+    card.style.opacity='0';
+    setTimeout(()=>card.remove(), 300);
+  }
+  // Update count
+  const remaining = allResults.filter(c=>!dismissed.has(c.id)).length;
+  document.getElementById('resultsCount').innerHTML = `<strong>${remaining}</strong> contract${remaining!==1?'s':''} found`;
+}
+
+function clearDismissed(){
+  dismissed.clear();
+  localStorage.removeItem('th_dismissed');
+  renderResults();
+}
+
 function renderResults(){
-  const arr = sortedResults();
+  const arr = sortedResults().filter(c => !dismissed.has(c.id));
   const count = arr.length;
   document.getElementById('resultsCount').innerHTML = `<strong>${count}</strong> contract${count!==1?'s':''} found`;
   document.getElementById('resultsCap').textContent = isLive && count===25 ? 'Showing top 25 results · refine filters to narrow' : '';
+  const dismissedBtn = document.getElementById('clearDismissedBtn');
+  if(dismissedBtn) dismissedBtn.style.display = dismissed.size > 0 ? 'block' : 'none';
 
   if(!count){
     document.getElementById('resultsContainer').innerHTML='<div class="empty-state"><p>No contracts matched your filters. Try broader keywords or different set-aside types.</p></div>';
@@ -860,6 +887,7 @@ function buildCard(c){
       <div class="card-actions">
         <a class="card-link" href="${c.samUrl||`https://sam.gov/search/?index=opp&q=${encodeURIComponent(c.solNumber||c.title)}&sort=-relevance&mode=&series=`}" target="_blank">View on SAM.gov ↗</a>
         <button class="card-link ghost btn" id="pipe-btn-${c.id}" onclick="togglePipeline('${c.id}')">${inPipeline?'✓ In Pipeline':'+ Add to Pipeline'}</button>
+        <button class="card-link dismiss btn" onclick="dismissContract('${c.id}')">✕ Pass</button>
       </div>
     </div>
   </div>`;
