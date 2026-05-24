@@ -300,6 +300,24 @@ option{background:var(--surface2)}
         </select>
       </div>
 
+      <div class="filter-group">
+        <div class="filter-label">Exclude Offices <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(comma separated)</span></div>
+        <input type="text" id="excludeOffices" placeholder="e.g. Mechanicsburg, Pearl Harbor" value="Mechanicsburg, Pearl Harbor"/>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Exclude PSC Codes <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none">(comma separated)</span></div>
+        <input type="text" id="excludePSC" placeholder="e.g. Y, Z, 5305, 5340"/>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">Sources Sought Only</div>
+        <select id="sourcesOnly">
+          <option value="">No — show all</option>
+          <option value="yes">Yes — Sources Sought only</option>
+        </select>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-primary btn-full" onclick="runSearch()">Search SAM.gov</button>
         <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
@@ -333,6 +351,10 @@ option{background:var(--surface2)}
 
 <!-- PIPELINE TAB -->
 <div id="tab-pipeline" style="display:none;padding:1.25rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+    <div style="font-size:13px;color:var(--text2)">Track your bid progress</div>
+    <button class="btn btn-ghost" onclick="exportPipeline()" style="font-size:11px">⬇ Export to CSV</button>
+  </div>
   <div class="pipeline-stages" id="pipelineStages">
     <div class="stage">
       <div class="stage-title">Evaluating</div>
@@ -470,9 +492,11 @@ function applyPreset(key){
 
 function clearFilters(){
   ['keywords','naics'].forEach(id=>document.getElementById(id).value='');
-  ['setAside','noticeType','state','postedWithin'].forEach(id=>document.getElementById(id).value='');
+  ['setAside','noticeType','state','postedWithin','sourcesOnly'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('valueMin').value='0';
   document.getElementById('valueMax').value='1000000';
+  document.getElementById('excludeOffices').value='Mechanicsburg, Pearl Harbor';
+  document.getElementById('excludePSC').value='';
   document.getElementById('resultsContainer').innerHTML='<div class="empty-state"><p>Filters cleared. Run a new search.</p></div>';
   document.getElementById('resultsCount').innerHTML='<strong>0</strong> contracts found';
   document.getElementById('resultsCap').textContent='';
@@ -520,6 +544,12 @@ function filterDemo(){
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysBack);
 
+  const excludeOfficesRaw = document.getElementById('excludeOffices')?.value || '';
+  const excludeOfficeList = excludeOfficesRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const excludePSCRaw = document.getElementById('excludePSC')?.value || '';
+  const excludePSCList = excludePSCRaw.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const sourcesOnly = document.getElementById('sourcesOnly')?.value === 'yes';
+
   return DEMO_DATA.filter(c => {
     if(kw && !c.title.toLowerCase().includes(kw) && !c.description.toLowerCase().includes(kw) && !c.naics.includes(kw)) return false;
     if(naics && !c.naics.startsWith(naics)) return false;
@@ -529,6 +559,9 @@ function filterDemo(){
     if(c.valueMax < vMin || c.valueMin > vMax) return false;
     const posted = new Date(c.postedDate);
     if(posted < cutoff) return false;
+    if(excludeOfficeList.length && excludeOfficeList.some(o => c.agency.toLowerCase().includes(o))) return false;
+    if(excludePSCList.length && c.psc && excludePSCList.some(p => c.psc.toUpperCase().startsWith(p))) return false;
+    if(sourcesOnly && c.noticeType !== 'Sources Sought') return false;
     return true;
   });
 }
@@ -579,8 +612,9 @@ async function fetchLive(apiKey){
   return (data.opportunitiesData || []).map(o => {
     const award = o.award || {};
     const awardAmt = parseFloat(award.amount) || 0;
-    const valMin = awardAmt ? Math.round(awardAmt * 0.6) : vMin;
-    const valMax = awardAmt ? awardAmt : vMax;
+    // Only use award amount if present; otherwise flag as unknown
+    const valMin = awardAmt ? Math.round(awardAmt * 0.6) : 0;
+    const valMax = awardAmt ? awardAmt : 0; // 0 = unknown, handled in display
     const state = o.officeAddress?.state || o.placeOfPerformance?.state?.code || '';
     const agencyRaw = o.fullParentPathName || o.organizationName || '';
     const agencyParts = agencyRaw.split('.');
@@ -602,11 +636,17 @@ async function fetchLive(apiKey){
       valueMax: valMax,
       solNumber: (o.solicitationNumber || '').trim(),
       description: (o.description && o.description !== 'null') ? o.description.slice(0, 300) : '',
-      samUrl: o.noticeId ? `https://sam.gov/opp/${o.noticeId}/view` : null
+      samUrl: o.uiLink || (o.noticeId ? `https://sam.gov/opp/${o.noticeId}/view` : null)
     };
   }).filter(c => {
     if(c.valueMax && c.valueMax < vMin) return false;
     if(c.valueMin && c.valueMin > vMax) return false;
+    const exOffices = (document.getElementById('excludeOffices')?.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    const exPSC = (document.getElementById('excludePSC')?.value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const ssOnly = document.getElementById('sourcesOnly')?.value === 'yes';
+    if(exOffices.length && exOffices.some(o => c.agency.toLowerCase().includes(o))) return false;
+    if(exPSC.length && c.psc && exPSC.some(p => c.psc.toUpperCase().startsWith(p))) return false;
+    if(ssOnly && !c.noticeType.toLowerCase().includes('sources sought')) return false;
     return true;
   });
 }
@@ -616,6 +656,7 @@ async function fetchLive(apiKey){
 const BAD_PSC = ['Y','Z'];
 // NAICS prefixes that indicate construction/heavy engineering — not broker-friendly  
 const BAD_NAICS = ['2361','2362','2371','2372','2373','2379','2211','2212','2213'];
+const CLINICAL_NAICS = ['6211','6212','6213','6214','6215','6216','6219','6221','6222','6223'];
 // NAICS prefixes that are ideal for broker/reseller model
 const GOOD_NAICS = ['3391','3399','3152','3159','3253','3256','4122','4123','4124','4233','4234','4244','4246','5617','8123','8129'];
 
@@ -636,6 +677,41 @@ function fitScore(c){
   // Specialty manufacturing/engineering NAICS not sourceable as broker
   const hardPassNAICS = ['3344','3345','3346','3364','3329','3323','3324','3325','3326','3327'];
   if(hardPassNAICS.some(n => c.naics && c.naics.startsWith(n))) s -= 20;
+
+  // Medical/clinical service NAICS — require licensed practitioners
+  if(CLINICAL_NAICS.some(n => c.naics && c.naics.startsWith(n))) s -= 30;
+
+  // Dental equipment requiring authorized distributor
+  if(c.naics && c.naics.startsWith('339114')) s -= 15;
+
+  // ── KNOWN HARD-PASS OFFICES ──
+  // NAVSUP WSS Mechanicsburg — exclusively nuclear/weapons system parts
+  if(clinicalNAICS && clinicalNAICS.some(n => c.naics && c.naics.startsWith(n))) reasons.push({icon:'✗',text:'Medical/clinical NAICS — requires licensed practitioners',bad:true});
+  if(c.naics && c.naics.startsWith('339114')) reasons.push({icon:'✗',text:'Dental equipment — authorized distributor status required',bad:true});
+  if(c.agency && c.agency.toUpperCase().includes('MECHANICSBURG')) s -= 50;
+  // DLA Maritime Pearl Harbor — naval ship components, requires QPL approval
+  if(c.agency && c.agency.toUpperCase().includes('PEARL HARBOR')) s -= 50;
+  // DLA Maritime Shipyards broadly
+  if(c.agency && c.agency.toUpperCase().includes('DLA MARITIME')) s -= 40;
+
+  // ── NUCLEAR / WEAPONS SYSTEM INDICATORS ──
+  // 6X NSN prefix = nuclear-qualified part (Trident submarine program)
+  if(c.title && /6X-/i.test(c.title)) s -= 50;
+  if(c.description && /6X-\d/i.test(c.description)) s -= 50;
+  // SUBSAFE keyword
+  if(c.description && /subsafe/i.test(c.description)) s -= 50;
+  // Level I / Level 1 material
+  if(c.description && /level\s*(i|1)\s*material/i.test(c.description)) s -= 45;
+  // Sole source intent
+  if(c.description && /FAR\s*6\.302-1|only one source|sole\s*source/i.test(c.description)) s -= 40;
+  // SAR required (Source Approval Request)
+  if(c.description && /source approval request|SAR package/i.test(c.description)) s -= 40;
+  // GSI / DCMA inspection required
+  if(c.description && /government source inspection|GSI required/i.test(c.description)) s -= 30;
+  // Trident submarine delivery destinations
+  if(c.description && /strategic weapons fac|trident refit/i.test(c.description)) s -= 50;
+  // TDP required (manufacture to military drawings)
+  if(c.description && /TDP VER/i.test(c.description)) s -= 25;
 
   // ── SET-ASIDE SCORING ──
   if(c.setAside==='VOSB') s+=20;
@@ -698,6 +774,16 @@ function fitReasons(c){
   if(naicsFilter && c.naics && c.naics.startsWith(naicsFilter)) reasons.push({icon:'✓',text:'Matches your NAICS filter',bad:false});
   const d = daysUntilDue(c.dueDate);
   if(d!==null && d<10) reasons.push({icon:'✗',text:'Less than 10 days to deadline',bad:true});
+  if(clinicalNAICS && clinicalNAICS.some(n => c.naics && c.naics.startsWith(n))) reasons.push({icon:'✗',text:'Medical/clinical NAICS — requires licensed practitioners',bad:true});
+  if(c.naics && c.naics.startsWith('339114')) reasons.push({icon:'✗',text:'Dental equipment — authorized distributor status required',bad:true});
+  if(c.agency && c.agency.toUpperCase().includes('MECHANICSBURG')) reasons.push({icon:'✗',text:'NAVSUP WSS Mechanicsburg — nuclear/weapons parts only',bad:true});
+  if(c.agency && (c.agency.toUpperCase().includes('PEARL HARBOR')||c.agency.toUpperCase().includes('DLA MARITIME'))) reasons.push({icon:'✗',text:'DLA Maritime — naval ship components, QPL approval required',bad:true});
+  if(c.description && /subsafe/i.test(c.description)) reasons.push({icon:'✗',text:'SUBSAFE program — submarine-critical part, extreme qualification required',bad:true});
+  if(c.description && /level\s*(i|1)\s*material/i.test(c.description)) reasons.push({icon:'✗',text:'Level I material — highest military criticality, approved source required',bad:true});
+  if(c.description && /FAR\s*6\.302-1|only one source|sole\s*source/i.test(c.description)) reasons.push({icon:'✗',text:'Sole source — award effectively predetermined',bad:true});
+  if(c.description && /source approval request|SAR package/i.test(c.description)) reasons.push({icon:'✗',text:'SAR required — must be pre-approved military source',bad:true});
+  if(c.description && /strategic weapons fac|trident refit/i.test(c.description)) reasons.push({icon:'✗',text:'Trident submarine facility — nuclear weapons program supply chain',bad:true});
+  if(c.description && /TDP VER/i.test(c.description)) reasons.push({icon:'✗',text:'TDP required — must manufacture to military technical drawings',bad:true});
   return reasons;
 }
 
@@ -887,6 +973,7 @@ function buildCard(c){
       <div class="card-actions">
         <a class="card-link" href="${c.samUrl||`https://sam.gov/search/?index=opp&q=${encodeURIComponent(c.solNumber||c.title)}&sort=-relevance&mode=&series=`}" target="_blank">View on SAM.gov ↗</a>
         <button class="card-link ghost btn" id="pipe-btn-${c.id}" onclick="togglePipeline('${c.id}')">${inPipeline?'✓ In Pipeline':'+ Add to Pipeline'}</button>
+        ${(c.noticeType==='Sources Sought'||c.noticeType==='Request for Information')?`<span class="badge badge-blue" style="padding:6px 10px;font-size:11px" title="Respond to this Sources Sought to build agency visibility — no bid required">📋 Respond to SS</span>`:''}
         <button class="card-link dismiss btn" onclick="dismissContract('${c.id}')">✕ Pass</button>
       </div>
     </div>
@@ -900,8 +987,10 @@ function toggleCard(id){
 
 // ─── VALUE FORMAT ─────────────────────────────────────────────
 function formatValue(min,max){
-  if(!min && !max) return 'TBD';
-  if(min===max) return '$'+fmtNum(min);
+  if(!min && !max) return 'Value TBD';
+  if(min===max && min>0) return '$'+fmtNum(min);
+  if(!min && max>0) return 'Up to $'+fmtNum(max);
+  if(min>0 && !max) return '$'+fmtNum(min)+'+';
   return '$'+fmtNum(min)+' – $'+fmtNum(max);
 }
 function formatShort(n){
@@ -935,11 +1024,34 @@ function togglePipeline(id){
     pipeline.splice(idx,1);
     document.getElementById('pipe-btn-'+id).textContent='+ Add to Pipeline';
   } else {
-    pipeline.push({...contract, stage:'eval', addedAt:new Date().toISOString()});
+    pipeline.push({...contract, stage:'eval', addedAt:new Date().toISOString(), notes:''});
     document.getElementById('pipe-btn-'+id).textContent='✓ In Pipeline';
   }
   savePipeline();
   renderPipeline();
+}
+
+function exportPipeline(){
+  if(!pipeline.length){ alert('No contracts in pipeline yet.'); return; }
+  const headers = ['Title','Agency','Stage','Set-Aside','NAICS','Value','Due Date','Solicitation #','Notes','SAM URL'];
+  const rows = pipeline.map(c=>[
+    `"${(c.title||'').replace(/"/g,'""')}"`,
+    `"${(c.agency||'').replace(/"/g,'""')}"`,
+    c.stage||'eval',
+    c.setAside||'',
+    c.naics||'',
+    formatValue(c.valueMin,c.valueMax),
+    c.dueDate||'',
+    c.solNumber||'',
+    `"${(c.notes||'').replace(/"/g,'""')}"`,
+    c.samUrl||''
+  ].join(','));
+  const csv = [headers.join(','),...rows].join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'thibodeau-pipeline-'+new Date().toISOString().split('T')[0]+'.csv';
+  a.click();
 }
 
 function savePipeline(){
@@ -959,10 +1071,11 @@ function renderPipeline(){
       <div class="stage-card">
         <div class="stage-card-title">${c.title}</div>
         <div class="stage-card-meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-          <span class="badge badge-gray">${formatShort(c.valueMax)}</span>
+          <span class="badge badge-gray">${formatShort(c.valueMax)||'TBD'}</span>
           ${days!==null?`<span class="badge ${days<10?'badge-red':days<21?'badge-amber':'badge-gray'} ${urgency}">${days}d</span>`:''}
         </div>
-        <div style="display:flex;gap:4px;margin-top:8px">
+        <textarea onchange="updateNote('${c.id}',this.value)" placeholder="Notes: supplier contacted, quote requested…" style="width:100%;margin-top:6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:inherit;font-size:11px;padding:4px 6px;resize:vertical;min-height:40px">${c.notes||''}</textarea>
+        <div style="display:flex;gap:4px;margin-top:6px">
           ${stage!=='eval'?`<button onclick="moveStage('${c.id}','${prevStage(stage)}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer">←</button>`:''}
           ${stage!=='submit'?`<button onclick="moveStage('${c.id}','${nextStage(stage)}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text2);cursor:pointer">→</button>`:''}
           <button onclick="removeFromPipeline('${c.id}')" style="font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--red);cursor:pointer;margin-left:auto">✕</button>
@@ -981,6 +1094,11 @@ function moveStage(id, stage){
   const idx = pipeline.findIndex(p=>p.id===id);
   if(idx>=0){ pipeline[idx].stage=stage; savePipeline(); renderPipeline(); }
 }
+function updateNote(id, text){
+  const idx = pipeline.findIndex(p=>p.id===id);
+  if(idx>=0){ pipeline[idx].notes=text; savePipeline(); }
+}
+
 function removeFromPipeline(id){
   pipeline = pipeline.filter(p=>p.id!==id);
   savePipeline(); renderPipeline();
