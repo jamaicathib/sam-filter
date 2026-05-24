@@ -506,7 +506,7 @@ function clearFilters(){
 // ─── SEARCH ──────────────────────────────────────────────────
 async function runSearch(){
   const apiKey = document.getElementById('apiKey').value.trim();
-  isLive = !!apiKey;
+  isLive = !!apiKey; // key presence triggers worker mode
   updateStatusDot(isLive);
 
   document.getElementById('resultsContainer').innerHTML='<div class="loading"><div class="spinner"></div> Searching contracts…</div>';
@@ -592,30 +592,19 @@ async function fetchLive(apiKey){
   if(noticeType) samUrl += `&ptype=${noticeType}`;
   if(state) samUrl += `&state=${state}`;
 
-  // Try multiple CORS proxies in sequence
-  let data;
-  const proxies = [
-    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  ];
+  // Route through Cloudflare Worker proxy (handles CORS + keeps API key secure)
+  const WORKER_URL = 'https://sam-proxy.jamaica-thibodeau.workers.dev';
 
-  let lastError;
-  for(const makeProxy of proxies){
-    try {
-      const proxyUrl = makeProxy(samUrl);
-      const r = await fetch(proxyUrl, {headers:{'X-Requested-With':'XMLHttpRequest'}});
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      const text = await r.text();
-      data = JSON.parse(text);
-      if(data && (data.opportunitiesData !== undefined || data.totalRecords !== undefined)) break;
-      throw new Error('Unexpected response shape');
-    } catch(e){
-      lastError = e;
-      continue;
-    }
-  }
-  if(!data) throw new Error(lastError?.message || 'All proxies failed');
+  // Build worker request — strip api_key from client-side URL, worker adds it securely
+  const workerParams = new URLSearchParams();
+  const tempUrl = new URL(samUrl);
+  tempUrl.searchParams.delete('api_key'); // never send key from browser
+  tempUrl.searchParams.forEach((v,k) => workerParams.set(k,v));
+
+  const workerRequest = `${WORKER_URL}?${workerParams.toString()}`;
+  const r = await fetch(workerRequest);
+  if(!r.ok) throw new Error(`Worker error: ${r.status}`);
+  const data = await r.json();
 
   const vMinMid = vMin;
   const vMaxMid = vMax;
