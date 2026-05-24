@@ -572,7 +572,9 @@ function matchNoticeType(label, code){
 }
 
 async function fetchLive(apiKey){
-  const kw = document.getElementById('keywords').value.trim() || 'supplies';
+  const WORKER = 'https://sam-proxy.jamaica-thibodeau.workers.dev';
+
+  const kw = document.getElementById('keywords').value.trim();
   const naics = document.getElementById('naics').value.trim();
   const setAside = document.getElementById('setAside').value;
   const noticeType = document.getElementById('noticeType').value;
@@ -582,39 +584,35 @@ async function fetchLive(apiKey){
   const vMax = parseInt(document.getElementById('valueMax').value)||1000000;
 
   const today = new Date();
-  const from = new Date(); from.setDate(from.getDate() - daysBack);
-  // SAM.gov requires mm/dd/yyyy format
+  const from = new Date();
+  from.setDate(from.getDate() - daysBack);
   const fmt = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
 
-  let samUrl = `https://api.sam.gov/opportunities/v2/search?api_key=${apiKey}&limit=25&q=${encodeURIComponent(kw)}&postedFrom=${fmt(from)}&postedTo=${fmt(today)}`;
-  if(naics) samUrl += `&naicsCode=${naics}`;
-  if(setAside) samUrl += `&typeOfSetAsideCode=${setAside}`;
-  if(noticeType) samUrl += `&ptype=${noticeType}`;
-  if(state) samUrl += `&state=${state}`;
+  // Build params — worker adds the api_key securely
+  const params = new URLSearchParams();
+  params.set('postedFrom', fmt(from));
+  params.set('postedTo', fmt(today));
+  params.set('limit', '25');
+  if(kw) params.set('q', kw);
+  if(naics) params.set('naicsCode', naics);
+  if(setAside) params.set('typeOfSetAside', setAside);
+  if(noticeType) params.set('ptype', noticeType);
+  if(state) params.set('state', state);
 
-  // Route through Cloudflare Worker proxy (handles CORS + keeps API key secure)
-  const WORKER_URL = 'https://sam-proxy.jamaica-thibodeau.workers.dev';
-
-  // Build worker request — strip api_key from client-side URL, worker adds it securely
-  const workerParams = new URLSearchParams();
-  const tempUrl = new URL(samUrl);
-  tempUrl.searchParams.delete('api_key'); // never send key from browser
-  tempUrl.searchParams.forEach((v,k) => workerParams.set(k,v));
-
-  const workerRequest = `${WORKER_URL}?${workerParams.toString()}`;
-  const r = await fetch(workerRequest);
+  const r = await fetch(`${WORKER}?${params.toString()}`);
   if(!r.ok) throw new Error(`Worker error: ${r.status}`);
   const data = await r.json();
+  if(data.error) throw new Error(data.error);
 
-  const vMinMid = vMin;
-  const vMaxMid = vMax;
+  const exOffices = (document.getElementById('excludeOffices')?.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const exPSC = (document.getElementById('excludePSC')?.value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const ssOnly = document.getElementById('sourcesOnly')?.value === 'yes';
 
   return (data.opportunitiesData || []).map(o => {
     const award = o.award || {};
     const awardAmt = parseFloat(award.amount) || 0;
-    // Only use award amount if present; otherwise flag as unknown
     const valMin = awardAmt ? Math.round(awardAmt * 0.6) : 0;
-    const valMax = awardAmt ? awardAmt : 0; // 0 = unknown, handled in display
+    const valMax = awardAmt ? awardAmt : 0;
     const state = o.officeAddress?.state || o.placeOfPerformance?.state?.code || '';
     const agencyRaw = o.fullParentPathName || o.organizationName || '';
     const agencyParts = agencyRaw.split('.');
@@ -626,24 +624,19 @@ async function fetchLive(apiKey){
       title: o.title || 'Untitled',
       agency: agency || 'Federal Agency',
       naics: (o.naicsCode || '').toString().replace(/[^0-9]/g,''),
+      psc: o.classificationCode || '',
       setAside: o.typeOfSetAside || '',
       noticeType: o.type || o.baseType || '',
-      psc: o.classificationCode || '',
       state: state,
       postedDate: (o.postedDate || '').split('T')[0],
       dueDate: dueDate,
       valueMin: valMin,
       valueMax: valMax,
       solNumber: (o.solicitationNumber || '').trim(),
-      description: (o.description && o.description !== 'null') ? o.description.slice(0, 300) : '',
+      description: (o.description && o.description !== 'null') ? o.description.slice(0,300) : '',
       samUrl: o.uiLink || (o.noticeId ? `https://sam.gov/opp/${o.noticeId}/view` : null)
     };
   }).filter(c => {
-    if(c.valueMax && c.valueMax < vMin) return false;
-    if(c.valueMin && c.valueMin > vMax) return false;
-    const exOffices = (document.getElementById('excludeOffices')?.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
-    const exPSC = (document.getElementById('excludePSC')?.value||'').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-    const ssOnly = document.getElementById('sourcesOnly')?.value === 'yes';
     if(exOffices.length && exOffices.some(o => c.agency.toLowerCase().includes(o))) return false;
     if(exPSC.length && c.psc && exPSC.some(p => c.psc.toUpperCase().startsWith(p))) return false;
     if(ssOnly && !c.noticeType.toLowerCase().includes('sources sought')) return false;
