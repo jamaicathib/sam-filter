@@ -198,12 +198,14 @@ option{background:var(--surface2)}
     <div class="sidebar">
       <div class="section-label">Quick Presets</div>
       <div class="presets">
-        <button class="preset-btn" onclick="applyPreset('va')">VA + SDVOSB · TN</button>
+        <button class="preset-btn" onclick="applyPreset('va')">VA + VOSB · TN</button>
         <button class="preset-btn" onclick="applyPreset('ppe')">PPE · Nationwide</button>
         <button class="preset-btn" onclick="applyPreset('uniforms')">Uniforms · Military</button>
+        <button class="preset-btn" onclick="applyPreset('laundry')">Laundry · Services</button>
+        <button class="preset-btn" onclick="applyPreset('janitorial')">Janitorial · SBA</button>
         <button class="preset-btn" onclick="applyPreset('sources')">Sources Sought · TN</button>
         <button class="preset-btn" onclick="applyPreset('small')">Under $100K</button>
-        <button class="preset-btn" onclick="applyPreset('electronics')">Electronics Resale</button>
+        <button class="preset-btn" onclick="applyPreset('supplies')">Office/Facility Supplies</button>
       </div>
 
       <div class="filter-group">
@@ -440,12 +442,14 @@ const DEMO_DATA = [
 
 // ─── PRESETS ─────────────────────────────────────────────────
 const PRESETS = {
-  va:{keywords:'medical gloves PPE',setAside:'SDVOSB',state:'TN',noticeType:'',naics:''},
-  ppe:{keywords:'PPE masks respirator gloves',setAside:'',state:'',noticeType:'o',naics:'339113'},
-  uniforms:{keywords:'uniform apparel tactical',setAside:'SBA',state:'',noticeType:'o',naics:'315990'},
+  va:{keywords:'medical supplies gloves PPE',setAside:'VOSB',state:'TN',noticeType:'',naics:'339113'},
+  ppe:{keywords:'PPE masks respirator gloves safety',setAside:'',state:'',noticeType:'o',naics:'339113'},
+  uniforms:{keywords:'uniform apparel tactical clothing',setAside:'SBA',state:'',noticeType:'o',naics:'315990'},
+  laundry:{keywords:'laundry linen scrubs cleaning',setAside:'SBA',state:'',noticeType:'',naics:'812320'},
+  janitorial:{keywords:'janitorial housekeeping cleaning facility',setAside:'SBA',state:'',noticeType:'',naics:'561720'},
   sources:{keywords:'',setAside:'',state:'TN',noticeType:'k',naics:''},
   small:{keywords:'',valueMax:'100000',setAside:'SBA',state:'',noticeType:'',naics:''},
-  electronics:{keywords:'electronics components hardware',setAside:'SBA',state:'',noticeType:'',naics:'423690'}
+  supplies:{keywords:'office supplies facility consumables',setAside:'SBA',state:'',noticeType:'',naics:'424120'}
 };
 
 function applyPreset(key){
@@ -585,6 +589,7 @@ async function fetchLive(apiKey){
       naics: (o.naicsCode || '').toString().replace(/[^0-9]/g,''),
       setAside: o.typeOfSetAside || '',
       noticeType: o.type || o.baseType || '',
+      psc: o.classificationCode || '',
       state: state,
       postedDate: (o.postedDate || '').split('T')[0],
       dueDate: dueDate,
@@ -602,47 +607,93 @@ async function fetchLive(apiKey){
 }
 
 // ─── FIT SCORE ────────────────────────────────────────────────
+// PSC codes that indicate construction/engineering — not broker-friendly
+const BAD_PSC = ['Y','Z'];
+// NAICS prefixes that indicate construction/heavy engineering — not broker-friendly  
+const BAD_NAICS = ['2361','2362','2371','2372','2373','2379','2211','2212','2213'];
+// NAICS prefixes that are ideal for broker/reseller model
+const GOOD_NAICS = ['3391','3399','3152','3159','3253','3256','4122','4123','4124','4233','4234','4244','4246','5617','8123','8129'];
+
 function fitScore(c){
   let s = 50;
+  const naicsFilter = document.getElementById('naics').value.trim();
 
-  // Set-aside scoring — VOSB and SBA are the primary eligible types for Thibodeau Holdings
-  // SDVOSB requires certification not yet held, so those are aspirational (lower score)
-  if(c.setAside==='VOSB') s+=20;           // veteran-owned: full eligibility
-  else if(c.setAside==='SBA') s+=18;        // small business: full eligibility
-  else if(c.setAside==='WOSB') s+=12;       // women-owned: eligible if applicable
-  else if(c.setAside==='HUBZone') s+=8;     // check zone eligibility
-  else if(c.setAside==='SDVOSB') s+=5;      // service-disabled: not yet certified, skip for now
-  else if(c.setAside==='8A') s+=3;          // 8(a): requires separate certification
-  else if(!c.setAside) s+=15;              // open competition: no set-aside restriction, anyone can bid
+  // ── HARD PENALTIES — these are near-automatic passes ──
+  // Award notices = already awarded, nothing to bid
+  if(c.noticeType==='Award Notice') s -= 40;
 
-  // Tennessee and nearby states
+  // Construction/engineering PSC codes (Y*, Z*)
+  if(c.psc && BAD_PSC.some(p => c.psc.startsWith(p))) s -= 35;
+
+  // Construction NAICS — requires licensed contractors, on-site crews
+  if(BAD_NAICS.some(n => c.naics && c.naics.startsWith(n))) s -= 30;
+
+  // Specialty manufacturing/engineering NAICS not sourceable as broker
+  const hardPassNAICS = ['3344','3345','3346','3364','3329','3323','3324','3325','3326','3327'];
+  if(hardPassNAICS.some(n => c.naics && c.naics.startsWith(n))) s -= 20;
+
+  // ── SET-ASIDE SCORING ──
+  if(c.setAside==='VOSB') s+=20;
+  else if(c.setAside==='SBA') s+=18;
+  else if(c.setAside==='WOSB') s+=12;
+  else if(c.setAside==='HUBZone') s+=8;
+  else if(c.setAside==='SDVOSB') s+=5;
+  else if(c.setAside==='8A') s+=3;
+  else if(!c.setAside) s+=15;
+
+  // ── LOCATION ──
   if(c.state==='TN') s+=12;
   else if(['KY','AL','GA','MS','NC','VA'].includes(c.state)) s+=5;
-  else if(!c.state) s+=6;                  // nationwide = fine for supply/resale
+  else if(!c.state) s+=6;
+  // Far states with on-site construction work = penalty
+  else if(['AK','HI','PR'].includes(c.state) && BAD_NAICS.some(n => c.naics && c.naics.startsWith(n))) s-=10;
 
-  // Deadline window (10–30 days is ideal to act now)
+  // ── DEADLINE ──
   const d = daysUntilDue(c.dueDate);
   if(d===null) s+=3;
   else if(d>=10 && d<=30) s+=10;
   else if(d>30 && d<=60) s+=7;
   else if(d>60) s+=3;
-  else s-=15;                              // expired or <10 days = penalty
+  else s-=15;
 
-  // Value sweet spot ($15K–$350K)
+  // ── VALUE SWEET SPOT ($15K–$350K) ──
   const mid = (c.valueMin+c.valueMax)/2;
   if(mid>=15000 && mid<=350000) s+=8;
   else if(mid>350000 && mid<=750000) s+=4;
 
-  // Notice type — solicitations are actionable right now
-  if(c.noticeType==='Solicitation'||c.noticeType==='Combined Synopsis/Solicitation') s+=8;
-  else if(c.noticeType==='Sources Sought') s+=4;  // worth responding to build visibility
-  else if(c.noticeType==='Presolicitation') s+=2;  // watch list
+  // ── NOTICE TYPE ──
+  if(c.noticeType==='Combined Synopsis/Solicitation') s+=10;
+  else if(c.noticeType==='Solicitation') s+=8;
+  else if(c.noticeType==='Sources Sought') s+=4;
+  else if(c.noticeType==='Presolicitation') s+=2;
+  else if(c.noticeType==='Award Notice') s-=10; // extra penalty on top of above
 
-  // NAICS filter match bonus
-  const naicsFilter = document.getElementById('naics').value.trim();
+  // ── IDEAL BROKER NAICS BONUS ──
+  if(GOOD_NAICS.some(n => c.naics && c.naics.startsWith(n))) s+=10;
+
+  // ── NAICS FILTER MATCH BONUS ──
   if(naicsFilter && c.naics && c.naics.startsWith(naicsFilter)) s+=8;
 
   return Math.min(100, Math.max(0, Math.round(s)));
+}
+
+// Human-readable explanation of why a contract scored high or low
+function fitReasons(c){
+  const reasons = [];
+  const naicsFilter = document.getElementById('naics').value.trim();
+  if(c.noticeType==='Award Notice') reasons.push({icon:'✗',text:'Already awarded — nothing to bid',bad:true});
+  if(BAD_PSC.some(p => c.psc && c.psc.startsWith(p))) reasons.push({icon:'✗',text:'Construction/engineering PSC — requires licensed contractor',bad:true});
+  if(BAD_NAICS.some(n => c.naics && c.naics.startsWith(n))) reasons.push({icon:'✗',text:'Construction NAICS — on-site crew required',bad:true});
+  if(c.setAside==='VOSB'||c.setAside==='SBA') reasons.push({icon:'✓',text:`${c.setAside} set-aside — you're eligible`,bad:false});
+  if(!c.setAside) reasons.push({icon:'✓',text:'Open competition — no special cert required',bad:false});
+  if(c.state==='TN') reasons.push({icon:'✓',text:'Tennessee — home state advantage',bad:false});
+  if(!c.state) reasons.push({icon:'✓',text:'Nationwide — remote/supply contract',bad:false});
+  if(c.noticeType==='Combined Synopsis/Solicitation'||c.noticeType==='Solicitation') reasons.push({icon:'✓',text:'Active solicitation — bid now',bad:false});
+  if(GOOD_NAICS.some(n => c.naics && c.naics.startsWith(n))) reasons.push({icon:'✓',text:'Broker-friendly NAICS — sourceable without specialty license',bad:false});
+  if(naicsFilter && c.naics && c.naics.startsWith(naicsFilter)) reasons.push({icon:'✓',text:'Matches your NAICS filter',bad:false});
+  const d = daysUntilDue(c.dueDate);
+  if(d!==null && d<10) reasons.push({icon:'✗',text:'Less than 10 days to deadline',bad:true});
+  return reasons;
 }
 
 function fitLabel(score){
@@ -774,7 +825,12 @@ function buildCard(c){
       </div>
 
       <div class="checklist">
-        <div class="checklist-title">Bid / No-Bid Quick Check</div>
+        <div class="checklist-title">Why This Score + Bid / No-Bid Check</div>
+        ${(()=>{
+          const reasons = fitReasons(c);
+          return reasons.map(r=>`<div class="check-item"><div class="check-icon ${r.bad?'check-no':'check-yes'}">${r.icon}</div><span class="check-label">${r.text}</span></div>`).join('');
+        })()}
+        <div style="height:6px;border-top:1px solid var(--border);margin:8px 0"></div>
         <div class="check-item">
           <div class="check-icon ${naicsMatch?'check-yes':'check-no'}">${naicsMatch?'✓':'✗'}</div>
           <span class="check-label">NAICS code match${naicsFilter?` (${c.naics} ~ ${naicsFilter})`:' (no filter set)'}</span>
