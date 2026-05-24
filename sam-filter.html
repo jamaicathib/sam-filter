@@ -568,25 +568,35 @@ async function fetchLive(apiKey){
   const vMaxMid = vMax;
 
   return (data.opportunitiesData || []).map(o => {
-    const award = o.award||{};
+    const award = o.award || {};
+    const awardAmt = parseFloat(award.amount) || 0;
+    const valMin = awardAmt ? Math.round(awardAmt * 0.6) : vMin;
+    const valMax = awardAmt ? awardAmt : vMax;
+    const state = o.officeAddress?.state || o.placeOfPerformance?.state?.code || '';
+    const agencyRaw = o.fullParentPathName || o.organizationName || '';
+    const agencyParts = agencyRaw.split('.');
+    const agency = agencyParts.length > 1 ? agencyParts[agencyParts.length - 2] : agencyRaw;
+    const dueRaw = o.responseDeadLine || o.archiveDate || '';
+    const dueDate = dueRaw ? dueRaw.split('T')[0] : '';
     return {
-      id: o.noticeId,
-      title: o.title,
-      agency: o.organizationName || o.fullParentPathName || 'Unknown Agency',
-      naics: (o.naicsCode||'').replace(/[^0-9]/g,''),
+      id: o.noticeId || '',
+      title: o.title || 'Untitled',
+      agency: agency || 'Federal Agency',
+      naics: (o.naicsCode || '').toString().replace(/[^0-9]/g,''),
       setAside: o.typeOfSetAside || '',
-      noticeType: o.type || '',
-      state: o.officeAddress?.state || '',
-      postedDate: o.postedDate?.split('T')[0] || '',
-      dueDate: o.responseDeadLine?.split('T')[0] || o.archiveDate?.split('T')[0] || '',
-      valueMin: award.amount ? award.amount * .5 : vMinMid,
-      valueMax: award.amount || (vMinMid + vMaxMid) / 2,
-      solNumber: o.solicitationNumber || o.noticeId,
-      description: o.description?.slice(0,250) || '',
-      samUrl: `https://sam.gov/opp/${o.noticeId}/view`
+      noticeType: o.type || o.baseType || '',
+      state: state,
+      postedDate: (o.postedDate || '').split('T')[0],
+      dueDate: dueDate,
+      valueMin: valMin,
+      valueMax: valMax,
+      solNumber: (o.solicitationNumber || '').trim(),
+      description: (o.description && o.description !== 'null') ? o.description.slice(0, 300) : '',
+      samUrl: o.noticeId ? `https://sam.gov/opp/${o.noticeId}/view` : null
     };
   }).filter(c => {
-    if(c.valueMax < vMin || c.valueMin > vMax) return false;
+    if(c.valueMax && c.valueMax < vMin) return false;
+    if(c.valueMin && c.valueMin > vMax) return false;
     return true;
   });
 }
@@ -792,7 +802,7 @@ function buildCard(c){
       </div>
 
       <div class="card-actions">
-        <a class="card-link" href="${c.samUrl||`https://sam.gov/search/?index=opp&keywords=${encodeURIComponent(c.solNumber||c.title)}`}" target="_blank">View on SAM.gov ↗</a>
+        <a class="card-link" href="${c.samUrl||`https://sam.gov/search/?index=opp&q=${encodeURIComponent(c.solNumber||c.title)}&sort=-relevance&mode=&series=`}" target="_blank">View on SAM.gov ↗</a>
         <button class="card-link ghost btn" id="pipe-btn-${c.id}" onclick="togglePipeline('${c.id}')">${inPipeline?'✓ In Pipeline':'+ Add to Pipeline'}</button>
       </div>
     </div>
